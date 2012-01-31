@@ -58,7 +58,7 @@ opened(S) ->
      {opened, {call, bitcask, get, [S#state.bitcask, key(S)]}},
      {opened, {call, bitcask, put, [S#state.bitcask, key(S), value()]}},
      {opened, {call, bitcask, delete, [S#state.bitcask, key(S)]}},
-     {opened, {call, bitcask, merge, [?TEST_DIR]}}
+     {opened, {call, ?MODULE, merge, [?TEST_DIR]}}
      ].
 
 next_state_data(init, closed, S, _, {call, _, set_keys, [Keys]}) ->
@@ -93,6 +93,8 @@ postcondition(opened, opened, S, {call, bitcask, get, [_, Key]}, not_found) ->
     not orddict:is_key(Key, S#state.data);
 postcondition(opened, opened, S, {call, bitcask, get, [_, Key]}, {ok, Value}) ->
     Value == orddict:fetch(Key, S#state.data);
+postcondition(opened, opened, S, {call, _, merge, [_, Key]}, Res) ->
+    equals(Res, ok);
 postcondition(_From,_To,_S,{call,_,_,_},_Res) ->
     true.
 
@@ -100,9 +102,9 @@ qc_test_() ->
     {timeout, 120, fun() -> true = eqc:quickcheck(?QC_OUT(prop_bitcask())) end}.
 
 prop_bitcask() ->
-    ?FORALL(Cmds, commands(?MODULE),
+    ?FORALL(Cmds, more_commands(40, commands(?MODULE)),
             begin
-                erlang:garbage_collect(),
+                %% erlang:garbage_collect(),
                 [] = os:cmd("rm -rf " ++ ?TEST_DIR),
                 {H,{_State, StateData}, Res} = run_commands(?MODULE,Cmds),
                 %% case Res of
@@ -149,6 +151,18 @@ create_stale_lock() ->
     filelib:ensure_dir(Fname),
     ok = file:write_file(Fname, "102349430239 abcdef\n").
 
+merge(Dir) ->
+    Me = self(),
+    Ref = make_ref(),
+    spawn_link(fun() -> Me ! {Ref, bitcask:merge(Dir)} end),
+    receive
+        {Ref, Result} ->
+            Result
+    after
+        30000 ->
+            timeout
+    end.
+        
 -endif.
 
 
