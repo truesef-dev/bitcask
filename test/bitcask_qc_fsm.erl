@@ -58,7 +58,7 @@ opened(S) ->
      {opened, {call, bitcask, get, [S#state.bitcask, key(S)]}},
      {opened, {call, bitcask, put, [S#state.bitcask, key(S), value()]}},
      {opened, {call, bitcask, delete, [S#state.bitcask, key(S)]}},
-     {opened, {call, ?MODULE, merge, [?TEST_DIR]}}
+     {opened, {call, bitcask, merge, [?TEST_DIR]}}
      ].
 
 next_state_data(init, closed, S, _, {call, _, set_keys, [Keys]}) ->
@@ -93,8 +93,8 @@ postcondition(opened, opened, S, {call, bitcask, get, [_, Key]}, not_found) ->
     not orddict:is_key(Key, S#state.data);
 postcondition(opened, opened, S, {call, bitcask, get, [_, Key]}, {ok, Value}) ->
     Value == orddict:fetch(Key, S#state.data);
-postcondition(opened, opened, S, {call, _, merge, [_, Key]}, Res) ->
-    equals(Res, ok);
+postcondition(opened, opened, _S, {call, _, merge, [_TestDir]}, Res) ->
+    Res == ok;
 postcondition(_From,_To,_S,{call,_,_,_},_Res) ->
     true.
 
@@ -119,9 +119,8 @@ prop_bitcask() ->
                     Ref ->
                         bitcask:close(Ref)
                 end,
-                collect(length(Cmds),
-                        aggregate(zip(state_names(H),command_names(Cmds)), 
-                                  equals(Res, ok)))
+                aggregate(zip(state_names(H),command_names(Cmds)), 
+                          equals(Res, ok))
             end).
 
 %% Weight for transition (this callback is optional).
@@ -150,18 +149,6 @@ create_stale_lock() ->
     Fname = filename:join(?TEST_DIR, "bitcask.write.lock"),
     filelib:ensure_dir(Fname),
     ok = file:write_file(Fname, "102349430239 abcdef\n").
-
-merge(Dir) ->
-    Me = self(),
-    Ref = make_ref(),
-    spawn_link(fun() -> Me ! {Ref, bitcask:merge(Dir)} end),
-    receive
-        {Ref, Result} ->
-            Result
-    after
-        30000 ->
-            timeout
-    end.
         
 -endif.
 
